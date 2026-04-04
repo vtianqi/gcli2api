@@ -41,6 +41,9 @@ class SQLiteManager:
             ("tier", "TEXT DEFAULT 'pro'"),
             ("rotation_order", "INTEGER DEFAULT 0"),
             ("call_count", "INTEGER DEFAULT 0"),
+            ("avg_response_ms", "REAL DEFAULT 1000"),
+            ("success_count", "INTEGER DEFAULT 0"),
+            ("fail_count", "INTEGER DEFAULT 0"),
             ("created_at", "REAL DEFAULT (unixepoch())"),
             ("updated_at", "REAL DEFAULT (unixepoch())")
         ],
@@ -54,6 +57,9 @@ class SQLiteManager:
             ("tier", "TEXT DEFAULT 'pro'"),
             ("rotation_order", "INTEGER DEFAULT 0"),
             ("call_count", "INTEGER DEFAULT 0"),
+            ("avg_response_ms", "REAL DEFAULT 1000"),
+            ("success_count", "INTEGER DEFAULT 0"),
+            ("fail_count", "INTEGER DEFAULT 0"),
             ("created_at", "REAL DEFAULT (unixepoch())"),
             ("updated_at", "REAL DEFAULT (unixepoch())")
         ]
@@ -180,6 +186,11 @@ class SQLiteManager:
                 rotation_order INTEGER DEFAULT 0,
                 call_count INTEGER DEFAULT 0,
 
+                -- 健康统计（智能账号池）
+                avg_response_ms REAL DEFAULT 1000,
+                success_count INTEGER DEFAULT 0,
+                fail_count INTEGER DEFAULT 0,
+
                 -- 时间戳
                 created_at REAL DEFAULT (unixepoch()),
                 updated_at REAL DEFAULT (unixepoch())
@@ -209,6 +220,11 @@ class SQLiteManager:
                 -- 轮换相关
                 rotation_order INTEGER DEFAULT 0,
                 call_count INTEGER DEFAULT 0,
+
+                -- 健康统计（智能账号池）
+                avg_response_ms REAL DEFAULT 1000,
+                success_count INTEGER DEFAULT 0,
+                fail_count INTEGER DEFAULT 0,
 
                 -- 时间戳
                 created_at REAL DEFAULT (unixepoch()),
@@ -438,21 +454,27 @@ class SQLiteManager:
                         return None
                 else:
                     async with db.execute(f"""
-                        SELECT filename, credential_data, model_cooldowns
+                        SELECT filename, credential_data, model_cooldowns,
+                               success_count, fail_count, avg_response_ms
                         FROM {table_name}
                         WHERE disabled = 0
-                        ORDER BY RANDOM()
+                        ORDER BY
+                            -- 健康分：成功率高、响应快的排前面
+                            CASE WHEN (success_count + fail_count) = 0 THEN 50.0
+                                 ELSE (CAST(success_count AS REAL) / (success_count + fail_count)) * 100
+                            END DESC,
+                            avg_response_ms ASC
                     """) as cursor:
                         rows = await cursor.fetchall()
 
                         if not model_name:
                             if rows:
-                                filename, credential_json, _ = rows[0]
+                                filename, credential_json, _, _, _, _ = rows[0]
                                 credential_data = json.loads(credential_json)
                                 return filename, credential_data
                             return None
 
-                        for filename, credential_json, model_cooldowns_json in rows:
+                        for filename, credential_json, model_cooldowns_json, _, _, _ in rows:
                             model_cooldowns = json.loads(model_cooldowns_json or '{}')
                             model_cooldown = model_cooldowns.get(model_name)
                             if model_cooldown is None or current_time >= model_cooldown:
@@ -636,6 +658,10 @@ class SQLiteManager:
             if not set_clauses:
                 log.info(f"[DB] 没有需要更新的状态字段")
                 return True
+
+            # 如果是失败更新（error_codes 非空），自动累加 fail_count
+            if "error_codes" in state_updates and state_updates["error_codes"]:
+                set_clauses.append("fail_count = fail_count + 1")
 
             set_clauses.append("updated_at = unixepoch()")
             values.append(filename)
@@ -1270,10 +1296,12 @@ class SQLiteManager:
         self,
         filename: str,
         model_name: Optional[str] = None,
-        mode: str = "geminicli"
+        mode: str = "geminicli",
+        response_ms: float = 0
     ) -> None:
         """
         成功调用后的条件写入：
+        - 更新成功次数和平均响应时间
         - 只有当前 error_codes 非空时才清除错误并写 last_success
         - 只有当前存在该模型的冷却键时才清除
         通过 SQL WHERE 条件匹配实现
@@ -1284,6 +1312,26 @@ class SQLiteManager:
         try:
             table_name = self._get_table_name(mode)
             async with aiosqlite.connect(self._db_path) as db:
+                # 更新成功次数和平均响应时间（指数移动平均，alpha=0.2）
+                if response_ms > 0:
+                    await db.execute(f"""
+                        UPDATE {table_name}
+                        SET success_count = success_count + 1,
+                            avg_response_ms = CASE
+                                WHEN avg_response_ms IS NULL OR avg_response_ms = 0 THEN ?
+                                ELSE avg_response_ms * 0.8 + ? * 0.2
+                            END,
+                            updated_at = unixepoch()
+                        WHERE filename = ?
+                    """, (response_ms, response_ms, filename))
+                else:
+                    await db.execute(f"""
+                        UPDATE {table_name}
+                        SET success_count = success_count + 1,
+                            updated_at = unixepoch()
+                        WHERE filename = ?
+                    """, (filename,))
+
                 # 条件写入：只有 error_codes 非空时才触发
                 await db.execute(f"""
                     UPDATE {table_name}
