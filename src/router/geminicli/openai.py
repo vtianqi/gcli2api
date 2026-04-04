@@ -82,6 +82,12 @@ async def chat_completions(
         response = create_health_check_response(format="openai")
         return JSONResponse(content=response)
 
+    # 内容审查
+    from src.content_filter import check_content, check_content_safe_response
+    is_safe, reason = check_content(normalized_dict.get("messages", []))
+    if not is_safe:
+        return JSONResponse(content=check_content_safe_response(), status_code=400)
+
     # 处理模型名称和功能检测
     use_fake_streaming = is_fake_streaming_model(openai_request.model)
     use_anti_truncation = is_anti_truncation_model(openai_request.model)
