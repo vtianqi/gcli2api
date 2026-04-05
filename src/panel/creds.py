@@ -265,6 +265,9 @@ async def get_creds_status_common(
             "backend_type": backend_type,
             "model_cooldowns": summary.get("model_cooldowns", {}),
             "tier": summary.get("tier", "pro"),
+            "avg_response_ms": summary.get("avg_response_ms", 1000),
+            "success_count": summary.get("success_count", 0),
+            "fail_count": summary.get("fail_count", 0),
         }
 
         if mode == "geminicli":

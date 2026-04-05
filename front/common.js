@@ -656,6 +656,22 @@ function createCredCard(credInfo, manager) {
     const tierColor = tier === 'ultra' ? '#ff9800' : (tier === 'free' ? '#607d8b' : '#2e7d32');
     statusBadges += `<span class="status-badge" style="background-color: ${tierColor}; color: white;" title="凭证等级: ${tierLabel}">Tier: ${tierLabel}</span>`;
 
+    // 健康分显示
+    const successCount = credInfo.success_count || 0;
+    const failCount = credInfo.fail_count || 0;
+    const totalCount = successCount + failCount;
+    const successRate = totalCount > 0 ? Math.round(successCount / totalCount * 100) : null;
+    const avgMs = credInfo.avg_response_ms || null;
+
+    if (totalCount > 0) {
+        const rateColor = successRate >= 90 ? '#2e7d32' : (successRate >= 70 ? '#ff9800' : '#e74c3c');
+        statusBadges += `<span class="status-badge" style="background-color: ${rateColor}; color: white;" title="成功${successCount}次 / 失败${failCount}次">✓ ${successRate}%</span>`;
+    }
+    if (avgMs && avgMs < 9999) {
+        const msColor = avgMs < 1000 ? '#2e7d32' : (avgMs < 3000 ? '#ff9800' : '#e74c3c');
+        statusBadges += `<span class="status-badge" style="background-color: ${msColor}; color: white;" title="平均响应时间">⚡ ${Math.round(avgMs)}ms</span>`;
+    }
+
     // 模型级冷却状态
     if (credInfo.model_cooldowns && Object.keys(credInfo.model_cooldowns).length > 0) {
         const currentTime = Date.now() / 1000;

@@ -926,7 +926,8 @@ class SQLiteManager:
                 if mode == "geminicli":
                     all_query = f"""
                         SELECT filename, disabled, error_codes, last_success,
-                               user_email, rotation_order, model_cooldowns, preview, tier
+                               user_email, rotation_order, model_cooldowns, preview, tier,
+                               avg_response_ms, success_count, fail_count
                         FROM {table_name}
                         {where_clause}
                         ORDER BY rotation_order
@@ -934,7 +935,8 @@ class SQLiteManager:
                 else:
                     all_query = f"""
                         SELECT filename, disabled, error_codes, last_success,
-                               user_email, rotation_order, model_cooldowns, tier
+                               user_email, rotation_order, model_cooldowns, tier,
+                               avg_response_ms, success_count, fail_count
                         FROM {table_name}
                         {where_clause}
                         ORDER BY rotation_order
@@ -988,6 +990,9 @@ class SQLiteManager:
                             "tier": row[8] if mode == "geminicli" and row[8] is not None else (
                                 row[7] if mode != "geminicli" and row[7] is not None else "pro"
                             ),
+                            "avg_response_ms": row[9] if mode == "geminicli" else row[8],
+                            "success_count": row[10] if mode == "geminicli" else row[9],
+                            "fail_count": row[11] if mode == "geminicli" else row[10],
                         }
 
                         if mode == "geminicli":
