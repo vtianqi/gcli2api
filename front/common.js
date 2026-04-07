@@ -175,6 +175,32 @@ function createCredsManager(type) {
             document.getElementById(this.getElementId('StatTotal')).textContent = this.statsData.total;
             document.getElementById(this.getElementId('StatNormal')).textContent = this.statsData.normal;
             document.getElementById(this.getElementId('StatDisabled')).textContent = this.statsData.disabled;
+
+            // 计算健康汇总
+            const allCreds = Object.values(this.filteredData);
+            let totalSuccess = 0, totalFail = 0, totalMs = 0, msCount = 0;
+            allCreds.forEach(c => {
+                totalSuccess += c.success_count || 0;
+                totalFail += c.fail_count || 0;
+                if (c.avg_response_ms && c.avg_response_ms < 9999) {
+                    totalMs += c.avg_response_ms;
+                    msCount++;
+                }
+            });
+            const total = totalSuccess + totalFail;
+            const avgRate = total > 0 ? Math.round(totalSuccess / total * 100) : null;
+            const avgMs = msCount > 0 ? Math.round(totalMs / msCount) : null;
+
+            const healthEl = document.getElementById(this.getElementId('StatHealth'));
+            if (healthEl) {
+                if (avgRate !== null) {
+                    const color = avgRate >= 90 ? '#2e7d32' : (avgRate >= 70 ? '#ff9800' : '#e74c3c');
+                    healthEl.innerHTML = `<span style="color:${color};font-weight:bold">${avgRate}%</span>` +
+                        (avgMs ? ` &nbsp;<span style="color:#888;font-size:12px">⚡${avgMs}ms</span>` : '');
+                } else {
+                    healthEl.textContent = '暂无数据';
+                }
+            }
         },
 
         // 渲染凭证列表
