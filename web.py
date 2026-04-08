@@ -155,7 +155,6 @@ async def keepalive() -> Response:
 
 def main():
     """主启动函数"""
-    from hypercorn.asyncio import serve
     from hypercorn.config import Config
     from hypercorn.run import run
 
@@ -178,17 +177,13 @@ def main():
     config.errorlog = "-"
     config.loglevel = "INFO"
     config.workers = workers
-    if workers > 1:
-        config.application_path = "web:app"
+    config.application_path = "web:app"
 
     # 设置连接超时
     config.keep_alive_timeout = 600
     config.read_timeout = 600
 
-    if workers == 1:
-        asyncio.run(serve(app, config))
-    else:
-        run(config)
+    run(config)
 
 
 if __name__ == "__main__":
