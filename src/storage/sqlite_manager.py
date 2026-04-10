@@ -26,6 +26,7 @@ class SQLiteManager:
         "model_cooldowns",
         "preview",
         "tier",
+        "enable_credit",
     }
 
     # 所有必需的列定义（用于自动校验和修复）
@@ -55,6 +56,7 @@ class SQLiteManager:
             ("user_email", "TEXT"),
             ("model_cooldowns", "TEXT DEFAULT '{}'"),
             ("tier", "TEXT DEFAULT 'pro'"),
+            ("enable_credit", "INTEGER DEFAULT 0"),
             ("rotation_order", "INTEGER DEFAULT 0"),
             ("call_count", "INTEGER DEFAULT 0"),
             ("avg_response_ms", "REAL DEFAULT 1000"),
@@ -216,6 +218,9 @@ class SQLiteManager:
 
                 -- tier 状态 (默认为 pro)
                 tier TEXT DEFAULT 'pro',
+
+                -- 是否启用信用额度模式（仅 antigravity，有效值 0/1）
+                enable_credit INTEGER DEFAULT 0,
 
                 -- 轮换相关
                 rotation_order INTEGER DEFAULT 0,
@@ -455,7 +460,7 @@ class SQLiteManager:
                 else:
                     async with db.execute(f"""
                         SELECT filename, credential_data, model_cooldowns,
-                               success_count, fail_count, avg_response_ms
+                               success_count, fail_count, avg_response_ms, enable_credit
                         FROM {table_name}
                         WHERE disabled = 0
                         ORDER BY
@@ -469,16 +474,18 @@ class SQLiteManager:
 
                         if not model_name:
                             if rows:
-                                filename, credential_json, _, _, _, _ = rows[0]
+                                filename, credential_json, _, _, _, _, enable_credit = rows[0]
                                 credential_data = json.loads(credential_json)
+                                credential_data["enable_credit"] = bool(enable_credit)
                                 return filename, credential_data
                             return None
 
-                        for filename, credential_json, model_cooldowns_json, _, _, _ in rows:
+                        for filename, credential_json, model_cooldowns_json, _, _, _, enable_credit in rows:
                             model_cooldowns = json.loads(model_cooldowns_json or '{}')
                             model_cooldown = model_cooldowns.get(model_name)
                             if model_cooldown is None or current_time >= model_cooldown:
                                 credential_data = json.loads(credential_json)
+                                credential_data["enable_credit"] = bool(enable_credit)
                                 return filename, credential_data
 
                         return None
@@ -647,6 +654,8 @@ class SQLiteManager:
 
             for key, value in state_updates.items():
                 if key in self.STATE_FIELDS:
+                    if key == "enable_credit" and mode != "antigravity":
+                        continue
                     if key in ("error_codes", "error_messages", "model_cooldowns"):
                         # JSON 字段需要序列化
                         set_clauses.append(f"{key} = ?")
@@ -739,7 +748,7 @@ class SQLiteManager:
                 else:
                     # antigravity 模式
                     async with db.execute(f"""
-                        SELECT disabled, error_codes, last_success, user_email, model_cooldowns, tier
+                        SELECT disabled, error_codes, last_success, user_email, model_cooldowns, tier, enable_credit
                         FROM {table_name} WHERE filename = ?
                     """, (filename,)) as cursor:
                         row = await cursor.fetchone()
@@ -754,6 +763,7 @@ class SQLiteManager:
                                 "user_email": row[3],
                                 "model_cooldowns": json.loads(model_cooldowns_json),
                                 "tier": row[5] if row[5] is not None else "pro",
+                                "enable_credit": bool(row[6]) if row[6] is not None else False,
                             }
 
                     # 返回默认状态
@@ -764,6 +774,7 @@ class SQLiteManager:
                         "user_email": None,
                         "model_cooldowns": {},
                         "tier": "pro",
+                        "enable_credit": False,
                     }
 
         except Exception as e:
@@ -816,7 +827,7 @@ class SQLiteManager:
                     # antigravity 模式
                     async with db.execute(f"""
                         SELECT filename, disabled, error_codes, last_success,
-                               user_email, model_cooldowns, tier
+                               user_email, model_cooldowns, tier, enable_credit
                         FROM {table_name}
                     """) as cursor:
                         rows = await cursor.fetchall()
@@ -844,6 +855,7 @@ class SQLiteManager:
                                 "user_email": row[4],
                                 "model_cooldowns": model_cooldowns,
                                 "tier": row[6] if row[6] is not None else "pro",
+                                "enable_credit": bool(row[7]) if row[7] is not None else False,
                             }
 
                         return states
@@ -936,7 +948,7 @@ class SQLiteManager:
                     all_query = f"""
                         SELECT filename, disabled, error_codes, last_success,
                                user_email, rotation_order, model_cooldowns, tier,
-                               avg_response_ms, success_count, fail_count
+                               avg_response_ms, success_count, fail_count, enable_credit
                         FROM {table_name}
                         {where_clause}
                         ORDER BY rotation_order
@@ -994,6 +1006,9 @@ class SQLiteManager:
                             "success_count": row[10] if mode == "geminicli" else row[9],
                             "fail_count": row[11] if mode == "geminicli" else row[10],
                         }
+
+                        if mode != "geminicli":
+                            summary["enable_credit"] = bool(row[8]) if row[8] is not None else False
 
                         if mode == "geminicli":
                             summary["preview"] = bool(row[7]) if row[7] is not None else True
@@ -1295,6 +1310,39 @@ class SQLiteManager:
 
         except Exception as e:
             log.error(f"Error setting model cooldown for {filename}: {e}")
+            return False
+
+    async def clear_all_model_cooldowns(
+        self,
+        filename: str,
+        mode: str = "geminicli"
+    ) -> bool:
+        """清除某个凭证的所有模型冷却时间"""
+        self._ensure_initialized()
+
+        filename = os.path.basename(filename)
+
+        try:
+            table_name = self._get_table_name(mode)
+            async with aiosqlite.connect(self._db_path) as db:
+                result = await db.execute(f"""
+                    UPDATE {table_name}
+                    SET model_cooldowns = '{{}}',
+                        updated_at = unixepoch()
+                    WHERE filename = ?
+                """, (filename,))
+                updated_count = result.rowcount
+                await db.commit()
+
+            if updated_count == 0:
+                log.warning(f"Credential {filename} not found")
+                return False
+
+            log.debug(f"Cleared all model cooldowns: {filename} (mode={mode})")
+            return True
+
+        except Exception as e:
+            log.error(f"Error clearing all model cooldowns for {filename}: {e}")
             return False
 
     async def record_success(

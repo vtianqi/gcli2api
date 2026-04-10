@@ -126,7 +126,8 @@ function createCredsManager(type) {
                             user_email: item.user_email,
                             model_cooldowns: item.model_cooldowns || {},
                             preview: item.preview,
-                            tier: item.tier || 'pro'
+                            tier: item.tier || 'pro',
+                            enable_credit: !!item.enable_credit
                         };
                     });
 
@@ -697,6 +698,14 @@ function createCredCard(credInfo, manager) {
         const msColor = avgMs < 1000 ? '#2e7d32' : (avgMs < 3000 ? '#ff9800' : '#e74c3c');
         statusBadges += `<span class="status-badge" style="background-color: ${msColor}; color: white;" title="平均响应时间">⚡ ${Math.round(avgMs)}ms</span>`;
     }
+    // Credit 状态显示（仅 antigravity）
+    if (managerType === 'antigravity') {
+        if (credInfo.enable_credit) {
+            statusBadges += '<span class="status-badge" style="background-color: #2e7d32; color: white;" title="当前已开启Credit模式">Credit: ON</span>';
+        } else {
+            statusBadges += '<span class="status-badge" style="background-color: #616161; color: white;" title="当前已关闭Credit模式">Credit: OFF</span>';
+        }
+    }
 
     // 模型级冷却状态
     if (credInfo.model_cooldowns && Object.keys(credInfo.model_cooldowns).length > 0) {
@@ -739,6 +748,10 @@ function createCredCard(credInfo, manager) {
         <button class="cred-btn download" onclick="download${managerType === 'antigravity' ? 'Antigravity' : ''}Cred('${filename}')">下载</button>
         <button class="cred-btn email" onclick="fetch${managerType === 'antigravity' ? 'Antigravity' : ''}UserEmail('${filename}')">查看账号邮箱</button>
         ${managerType === 'antigravity' ? `<button class="cred-btn" style="background-color: #17a2b8;" onclick="toggleAntigravityQuotaDetails('${pathId}')" title="查看该凭证的额度信息">查看额度</button>` : ''}
+        ${managerType === 'antigravity' ? (credInfo.enable_credit
+            ? `<button class="cred-btn" style="background-color: #6c757d;" data-filename="${filename}" data-action="disable_credit" title="关闭该凭证的Credit模式">关闭 Credit</button>`
+            : `<button class="cred-btn" style="background-color: #20c997;" data-filename="${filename}" data-action="enable_credit" title="开启该凭证的Credit模式">开启 Credit</button>`
+        ) : ''}
         ${managerType !== 'antigravity' ? `<button class="cred-btn" style="background-color: #00bcd4;" onclick="configurePreviewChannel('${filename}')" title="配置Preview通道，启用实验性功能">设置预览</button>` : ''}
         <button class="cred-btn" style="background-color: #ff9800;" onclick="verify${managerType === 'antigravity' ? 'Antigravity' : ''}ProjectId('${filename}')" title="重新获取Project ID，可恢复403错误">检验</button>
         <button class="cred-btn" style="background-color: #9c27b0;" onclick="test${managerType === 'antigravity' ? 'Antigravity' : ''}Credential('${filename}')" title="测试凭证是否可用">消息测试</button>
