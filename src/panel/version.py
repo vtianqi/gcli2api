@@ -79,7 +79,7 @@ async def get_version_info(check_update: bool = False):
                     latest_short_hash = remote_version_data.get('short_hash', '')
                     current_hash = version_data.get('full_hash', '')
 
-                    has_update = (current_hash != latest_hash) if current_hash and latest_hash else None
+                    has_update = (version_data.get("short_hash","") != latest_short_hash) if latest_short_hash else None
 
                     response_data['check_update'] = True
                     response_data['has_update'] = has_update
