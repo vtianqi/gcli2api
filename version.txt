@@ -1,4 +1,4 @@
-full_hash=vd18d13c
-short_hash=vd18d13c
+full_hash=d18d13c
+short_hash=d18d13c
 message=增强显示
 date=2026-04-11 21:00:04 +0800
