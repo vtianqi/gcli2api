@@ -176,6 +176,32 @@ function createCredsManager(type) {
             document.getElementById(this.getElementId('StatTotal')).textContent = this.statsData.total;
             document.getElementById(this.getElementId('StatNormal')).textContent = this.statsData.normal;
             document.getElementById(this.getElementId('StatDisabled')).textContent = this.statsData.disabled;
+
+            // 计算健康汇总
+            const allCreds = Object.values(this.filteredData);
+            let totalSuccess = 0, totalFail = 0, totalMs = 0, msCount = 0;
+            allCreds.forEach(c => {
+                totalSuccess += c.success_count || 0;
+                totalFail += c.fail_count || 0;
+                if (c.avg_response_ms && c.avg_response_ms < 9999) {
+                    totalMs += c.avg_response_ms;
+                    msCount++;
+                }
+            });
+            const total = totalSuccess + totalFail;
+            const avgRate = total > 0 ? Math.round(totalSuccess / total * 100) : null;
+            const avgMs = msCount > 0 ? Math.round(totalMs / msCount) : null;
+
+            const healthEl = document.getElementById(this.getElementId('StatHealth'));
+            if (healthEl) {
+                if (avgRate !== null) {
+                    const color = avgRate >= 90 ? '#2e7d32' : (avgRate >= 70 ? '#ff9800' : '#e74c3c');
+                    healthEl.innerHTML = `<span style="color:${color};font-weight:bold">${avgRate}%</span>` +
+                        (avgMs ? ` &nbsp;<span style="color:#888;font-size:12px">⚡${avgMs}ms</span>` : '');
+                } else {
+                    healthEl.textContent = '暂无数据';
+                }
+            }
         },
 
         // 渲染凭证列表
@@ -669,6 +695,21 @@ function createCredCard(credInfo, manager) {
     const tierColor = tier === 'ultra' ? '#ff9800' : (tier === 'free' ? '#607d8b' : '#2e7d32');
     statusBadges += `<span class="status-badge" style="background-color: ${tierColor}; color: white;" title="凭证等级: ${tierLabel}">Tier: ${tierLabel}</span>`;
 
+    // 健康分显示
+    const successCount = credInfo.success_count || 0;
+    const failCount = credInfo.fail_count || 0;
+    const totalCount = successCount + failCount;
+    const successRate = totalCount > 0 ? Math.round(successCount / totalCount * 100) : null;
+    const avgMs = credInfo.avg_response_ms || null;
+
+    if (totalCount > 0) {
+        const rateColor = successRate >= 90 ? '#2e7d32' : (successRate >= 70 ? '#ff9800' : '#e74c3c');
+        statusBadges += `<span class="status-badge" style="background-color: ${rateColor}; color: white;" title="成功${successCount}次 / 失败${failCount}次">✓ ${successRate}%</span>`;
+    }
+    if (avgMs && avgMs < 9999) {
+        const msColor = avgMs < 1000 ? '#2e7d32' : (avgMs < 3000 ? '#ff9800' : '#e74c3c');
+        statusBadges += `<span class="status-badge" style="background-color: ${msColor}; color: white;" title="平均响应时间">⚡ ${Math.round(avgMs)}ms</span>`;
+    }
     // Credit 状态显示（仅 antigravity）
     if (managerType === 'antigravity') {
         if (credInfo.enable_credit) {

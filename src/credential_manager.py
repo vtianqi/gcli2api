@@ -430,6 +430,79 @@ class CredentialManager:
 
             return None
 
+    async def execute_with_failover(
+        self,
+        call_func,
+        mode: str = "antigravity",
+        model_name: Optional[str] = None,
+        max_attempts: int = 5
+    ):
+        """
+        自动故障转移执行器
+        请求失败后自动切换到下一个健康账号，客户无感
+
+        Args:
+            call_func: 异步函数，接受(filename, credential_data)，返回(success, result, error_code, response_ms)
+            mode: 凭证模式
+            model_name: 模型名
+            max_attempts: 最大尝试次数
+        """
+        import time
+        await self._ensure_initialized()
+        used_credentials = set()  # 记录已尝试过的账号，避免重复切换
+
+        for attempt in range(max_attempts):
+            result = await self._storage_adapter._backend.get_next_available_credential(
+                mode=mode, model_name=model_name
+            )
+            if not result:
+                log.error(f"故障转移：没有可用账号 (mode={mode}, attempt={attempt+1})")
+                return None
+
+            filename, credential_data = result
+
+            # 跳过已尝试过的账号
+            if filename in used_credentials:
+                log.warning(f"故障转移：账号已尝试过，跳过 {filename}")
+                continue
+            used_credentials.add(filename)
+
+            start_ms = time.time() * 1000
+            try:
+                success, data, error_code, error_msg = await call_func(filename, credential_data)
+                response_ms = time.time() * 1000 - start_ms
+
+                if success:
+                    # 记录成功 + 响应时间
+                    asyncio.create_task(
+                        self._storage_adapter._backend.record_success(
+                            filename, model_name=model_name, mode=mode, response_ms=response_ms
+                        )
+                    )
+                    log.debug(f"故障转移成功: {filename} (attempt={attempt+1}, response_ms={response_ms:.0f})")
+                    return data
+                else:
+                    # 记录失败，切换下一个账号
+                    log.warning(f"故障转移：账号 {filename} 请求失败 (error={error_code})，切换下一个")
+                    await self.record_api_call_result(
+                        filename, success=False,
+                        error_code=error_code, mode=mode,
+                        model_name=model_name, error_message=error_msg
+                    )
+                    continue
+            except Exception as e:
+                response_ms = time.time() * 1000 - start_ms
+                log.error(f"故障转移：账号 {filename} 异常 {e}，切换下一个")
+                await self.record_api_call_result(
+                    filename, success=False,
+                    error_code=500, mode=mode,
+                    model_name=model_name, error_message=str(e)
+                )
+                continue
+
+        log.error(f"故障转移：尝试 {max_attempts} 次后仍无可用账号")
+        return None
+
     def _is_permanent_refresh_failure(self, error_msg: str, status_code: Optional[int] = None) -> bool:
         """
         判断是否是凭证永久失效的错误

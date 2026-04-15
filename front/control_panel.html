@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GCLI2API 控制面板</title>
+    <title>天启凭证管理系统</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
@@ -1347,7 +1347,7 @@
 
         <!-- 登录界面 -->
         <div id="loginSection" class="login-form">
-            <h1>GCLI2API 管理面板</h1>
+            <h1>天启管理面板</h1>
             <p>请输入访问密码：</p>
             <input type="password" id="loginPassword" placeholder="输入密码" onkeypress="handlePasswordEnter(event)" />
             <br>
@@ -1359,7 +1359,7 @@
             <div
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
-                    <h1 style="margin: 0;">GCLI2API 管理面板</h1>
+                    <h1 style="margin: 0;">天启管理面板</h1>
                     <span id="versionInfo" style="font-size: 12px; color: #666;">
                         <span id="versionText">加载中...</span>
                     </span>
@@ -1380,7 +1380,7 @@
                 <button class="tab active" onclick="switchTab('oauth')">OAuth认证</button>
                 <button class="tab" onclick="switchTab('antigravity')">Antigravity认证</button>
                 <button class="tab" onclick="switchTab('upload')">批量上传</button>
-                <button class="tab" onclick="switchTab('manage')">GCLI凭证管理</button>
+                <button class="tab" onclick="switchTab('manage')">凭证管理</button>
                 <button class="tab" onclick="switchTab('antigravity-manage')">Antigravity凭证管理</button>
                 <button class="tab" onclick="switchTab('config')">配置管理</button>
                 <button class="tab" onclick="switchTab('logs')">实时日志</button>
@@ -1598,11 +1598,11 @@
                 <h3>批量上传认证文件</h3>
                 <p>支持批量上传 GCLI 和 Antigravity 认证文件</p>
 
-                <!-- GCLI凭证上传区域 -->
+                <!-- 凭证上传区域 -->
                 <div
                     style="margin-bottom: 30px; padding: 20px; border: 2px solid #e1e4e8; border-radius: 8px; background: #f8f9fa;">
                     <h4 style="margin-top: 0; color: #007bff; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
-                        📤 GCLI 凭证批量上传</h4>
+                        📤 凭证批量上传</h4>
 
                     <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
                         <p>点击选择文件或拖拽文件到此区域</p>
@@ -1668,9 +1668,9 @@
                 </div>
             </div>
 
-            <!-- GCLI凭证管理标签页 -->
+            <!-- 凭证管理标签页 -->
             <div id="manageTab" class="tab-content">
-                <h3>GCLI凭证文件管理</h3>
+                <h3>凭证文件管理</h3>
                 <p>管理所有GCLI认证文件，查看状态和执行操作</p>
                 <div
                     style="background:#f0f7ff;border:1px solid #b8d4f0;border-radius:6px;padding:10px 14px;margin:8px 0;font-size:13px;">
@@ -1883,6 +1883,10 @@
                     <div class="stat-item disabled">
                         <span class="stat-number" id="antigravityStatDisabled">0</span>
                         <span class="stat-label">禁用</span>
+                    </div>
+                    <div class="stat-item" style="border-left: 3px solid #2196f3;">
+                        <span class="stat-number" id="antigravityStatHealth" style="font-size:14px">暂无数据</span>
+                        <span class="stat-label">平均健康分</span>
                     </div>
                 </div>
 
